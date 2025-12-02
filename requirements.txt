@@ -3,3 +3,6 @@ google-generativeai
 duckduckgo-search
 gTTS
 Pillow
+streamlit-mic-recorder
+SpeechRecognition
+PyPDF2

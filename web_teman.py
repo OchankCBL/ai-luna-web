@@ -2,31 +2,30 @@ import streamlit as st
 import google.generativeai as genai
 from duckduckgo_search import DDGS
 from gtts import gTTS
-from PIL import Image # Ini alat baru untuk pengolah gambar
+from PIL import Image
+from streamlit_mic_recorder import mic_recorder
+import speech_recognition as sr
+import io
+import PyPDF2
 
 # --- 1. CONFIG & API KEY ---
-st.set_page_config(page_title="Super Luna AI", page_icon="🌙")
+st.set_page_config(page_title="Super Luna AI", page_icon="🌙", layout="wide")
 
 try:
     API_KEY = st.secrets["API_KEY"]
 except:
     API_KEY = "PASTE_KODE_API_KEY_DISINI" 
 
-try:
-    genai.configure(api_key=API_KEY)
-    # Kita tetap pakai model Flash karena dia sudah Multimodal (Bisa lihat & baca)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction="""
-        Kamu adalah Luna. Teman yang asik dan serba tahu.
-        Jika user mengirim gambar, komentari gambar itu dengan detail tapi santai.
-        Gunakan bahasa Indonesia gaul (lu/gw).
-        """
-    )
-except Exception as e:
-    st.error(f"Error API: {e}")
+# --- 2. KAMUS KEPRIBADIAN ---
+PERSONAS = {
+    "Luna (Teman Santai)": "Kamu Luna, teman asik. Pakai bahasa gaul (lu/gw).",
+    "Asisten Riset (Ahli PDF)": "Anda asisten riset. Jawab detail berdasarkan dokumen. Bahasa formal.",
+    "Koki Handal": "Kamu Chef Bintang 5. Berikan resep lengkap dan tips memasak enak.",
+    "Komika (Roasting)": "Kamu komika sinis. Roasting user dengan lucu.",
+    "Konsultan Bisnis": "Kamu ahli bisnis. Beri saran cuan yang masuk akal."
+}
 
-# --- 2. FUNGSI-FUNGSI PENDUKUNG ---
+# --- 3. FUNGSI PENDUKUNG ---
 
 def cari_internet(query):
     try:
@@ -49,102 +48,173 @@ def generate_image_url(prompt):
     prompt_bersih = prompt.replace(" ", "%20")
     return f"https://image.pollinations.ai/prompt/{prompt_bersih}?nologo=true"
 
-# --- 3. UI: SIDEBAR (TEMPAT UPLOAD FOTO) ---
+def transkrip_suara(audio_bytes):
+    r = sr.Recognizer()
+    try:
+        audio_file = io.BytesIO(audio_bytes)
+        with sr.AudioFile(audio_file) as source:
+            audio_data = r.record(source)
+            text = r.recognize_google(audio_data, language="id-ID")
+            return text
+    except:
+        return None
+
+def baca_pdf(uploaded_file):
+    try:
+        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text()
+        return text
+    except:
+        return None
+
+# --- 4. SIDEBAR (PUSAT KONTROL) ---
 
 with st.sidebar:
-    st.header("📸 Mata Luna")
-    # Widget untuk upload file
-    uploaded_file = st.file_uploader("Upload foto untuk dilihat Luna:", type=["jpg", "jpeg", "png"])
+    st.title("🎛️ Kontrol Panel")
     
-    image_data = None
-    if uploaded_file is not None:
-        # Tampilkan preview kecil di sidebar
-        image_data = Image.open(uploaded_file)
-        st.image(image_data, caption="Foto siap dikirim!", use_column_width=True)
+    # PILIH SIFAT
+    selected_persona = st.selectbox("Mode:", list(PERSONAS.keys()))
     
-    st.divider()
-    
-    st.header("Pengaturan")
-    mode_suara = st.toggle("Aktifkan Suara Luna", value=False)
-    if st.button("Hapus Ingatan"):
+    # Logic ganti persona
+    if "current_persona" not in st.session_state:
+        st.session_state.current_persona = selected_persona
+    if st.session_state.current_persona != selected_persona:
+        st.session_state.current_persona = selected_persona
         st.session_state.messages = []
         st.rerun()
 
-# --- 4. LOGIKA CHAT UTAMA ---
+    # SETUP GEMINI
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=PERSONAS[selected_persona]
+        )
+    except:
+        st.error("Cek API Key!")
 
-st.title("🌙 Super Luna AI")
-st.caption("Kirim teks atau upload foto di menu samping (👈)")
+    st.divider()
+    
+    # --- FITUR INPUT (TAB) ---
+    tab1, tab2, tab3 = st.tabs(["🎤 Suara", "📸 Foto", "📄 PDF"])
+    
+    audio_prompt = None
+    image_data = None
+    pdf_text = ""
+    
+    with tab1:
+        st.caption("Klik Rekam -> Ngomong -> Stop")
+        audio_input = mic_recorder(start_prompt="🔴 Rekam", stop_prompt="⏹️ Stop", key='recorder', format="wav")
+        if audio_input:
+            if "last_id" not in st.session_state or st.session_state.last_id != audio_input['id']:
+                st.session_state.last_id = audio_input['id']
+                audio_prompt = transkrip_suara(audio_input['bytes'])
+                if not audio_prompt: st.error("Suara tak terdengar.")
+
+    with tab2:
+        uploaded_img = st.file_uploader("Upload Foto", type=["jpg", "png"])
+        if uploaded_img:
+            image_data = Image.open(uploaded_img)
+            st.image(image_data, caption="Foto", use_column_width=True)
+
+    with tab3:
+        uploaded_pdf = st.file_uploader("Upload Dokumen", type=["pdf"])
+        if uploaded_pdf:
+            with st.spinner("Membaca PDF..."):
+                pdf_text = baca_pdf(uploaded_pdf)
+                st.success(f"Berhasil: {len(pdf_text)} karakter")
+    
+    st.divider()
+    
+    # --- FITUR DOWNLOAD CHAT (BARU!) ---
+    if "messages" in st.session_state and len(st.session_state.messages) > 0:
+        chat_log = ""
+        for msg in st.session_state.messages:
+            role = msg["role"].upper()
+            content = msg["content"]
+            
+            # Kita hanya ambil teks, skip gambar agar tidak error
+            if msg["type"] == "text":
+                chat_log += f"[{role}]: {content}\n\n"
+            elif msg["type"] == "image_input":
+                chat_log += f"[{role}]: (Mengirim Gambar)\n\n"
+        
+        st.download_button(
+            label="💾 Simpan Chat (.txt)",
+            data=chat_log,
+            file_name="catatan_luna.txt",
+            mime="text/plain"
+        )
+    
+    st.divider()
+    mode_suara = st.toggle("🔊 Respon Suara", value=False)
+    if st.button("🧹 Reset Chat"):
+        st.session_state.messages = []
+        st.rerun()
+
+# --- 5. LOGIKA UTAMA ---
+
+st.title(f"🌙 {selected_persona}")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Tampilkan History Chat
+# Tampilkan Chat
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        if msg.get("type") == "image_input":
-            st.image(msg["content"], caption="Foto yang kamu kirim")
-        elif msg.get("type") == "image_output":
-            st.image(msg["content"], caption="Dibuat oleh Luna")
-        else:
-            st.markdown(msg["content"])
+        if msg.get("type") == "image_input": st.image(msg["content"], width=200)
+        elif msg.get("type") == "image_output": st.image(msg["content"])
+        else: st.markdown(msg["content"])
 
-# --- 5. PEMROSESAN INPUT ---
-if prompt := st.chat_input("Ketik pesan tentang foto itu..."):
-    
-    # A. Tampilkan Pesan User
+# --- 6. PROSES INPUT ---
+final_prompt = audio_prompt if audio_prompt else st.chat_input("Ketik pesan...")
+
+if final_prompt:
     with st.chat_message("user"):
-        st.markdown(prompt)
-        # Jika ada foto yang sedang diupload, tampilkan juga di chat utama
-        if image_data:
-            st.image(image_data, width=200)
+        st.markdown(final_prompt)
+        if image_data: st.image(image_data, width=200)
+        if pdf_text: st.markdown("*(Mengirim konteks PDF)*")
     
-    # Simpan ke history
-    st.session_state.messages.append({"role": "user", "content": prompt, "type": "text"})
-    if image_data:
-         # Kita simpan "jejak" bahwa user kirim foto (tapi tidak simpan datanya biar hemat memori)
-        st.session_state.messages.append({"role": "user", "content": image_data, "type": "image_input"})
+    st.session_state.messages.append({"role": "user", "content": final_prompt, "type": "text"})
+    if image_data: st.session_state.messages.append({"role": "user", "content": image_data, "type": "image_input"})
 
-    # B. Proses Jawaban Luna
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Thinking...")
+        placeholder.markdown("⏳ *Thinking...*")
         
         try:
-            # Skenario 1: Minta Buat Gambar (Text-to-Image)
-            keyword_gambar = ["gambarkan", "buatkan gambar", "lukiskan"]
-            if any(k in prompt.lower() for k in keyword_gambar) and not image_data:
+            # Skenario 1: Gambar
+            if any(k in final_prompt.lower() for k in ["gambarkan", "lukiskan"]) and not image_data:
                 chat_img = model.start_chat()
-                prompt_inggris = chat_img.send_message(f"Translate to English prompt for image generator: {prompt}").text
-                img_url = generate_image_url(prompt_inggris)
+                p_en = chat_img.send_message(f"English prompt image gen: {final_prompt}").text
+                url = generate_image_url(p_en)
                 placeholder.empty()
-                st.image(img_url)
-                st.session_state.messages.append({"role": "assistant", "content": img_url, "type": "image_output"})
+                st.image(url)
+                st.session_state.messages.append({"role": "assistant", "content": url, "type": "image_output"})
             
-            # Skenario 2: Analisa Foto (Vision) atau Chat Biasa
+            # Skenario 2: Analisa (Vision / PDF / Chat)
             else:
-                # Siapkan "history" (Sayangnya Gemini Vision belum support history panjang sempurna)
-                # Jadi untuk fitur Vision, kita pakai mode 'generate_content' (sekali tanya)
-                # agar lebih akurat memproses gambarnya.
+                input_content = [final_prompt]
+                if image_data: input_content.append(image_data)
                 
-                input_ke_gemini = [prompt]
-                if image_data:
-                    input_ke_gemini.append(image_data)
-                    placeholder.markdown("👁️ *Sedang melihat foto...*")
+                if pdf_text:
+                    pdf_sebagian = pdf_text[:30000] 
+                    input_content[0] = f"DATA PDF:\n{pdf_sebagian}\n\nUSER: {final_prompt}"
                 
-                # Cek internet jika perlu (Hanya kalau tidak ada gambar)
-                if not image_data and ("cari" in prompt.lower() or "info" in prompt.lower()):
-                     hasil = cari_internet(prompt)
-                     input_ke_gemini[0] = prompt + f"\n(Data Internet: {hasil})"
+                elif ("cari" in final_prompt.lower() or "info" in final_prompt.lower()) and not pdf_text:
+                    hasil = cari_internet(final_prompt)
+                    input_content[0] = final_prompt + f"\n(Data Internet: {hasil})"
 
-                # KIRIM KE GEMINI!
-                response = model.generate_content(input_ke_gemini)
-                text_reply = response.text
+                response = model.generate_content(input_content)
+                reply = response.text
                 
-                placeholder.markdown(text_reply)
-                st.session_state.messages.append({"role": "assistant", "content": text_reply, "type": "text"})
+                placeholder.markdown(reply)
+                st.session_state.messages.append({"role": "assistant", "content": reply, "type": "text"})
                 
                 if mode_suara:
-                    audio = text_to_speech(text_reply)
+                    audio = text_to_speech(reply)
                     if audio: st.audio(audio)
 
         except Exception as e:
