@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#A020F0"     # Warna Tombol/Aksen (Ungu Neon)
+backgroundColor = "#0E1117"  # Warna Latar Belakang (Hitam Pekat)
+secondaryBackgroundColor = "#262730" # Warna Sidebar (Abu Gelap)
+textColor = "#FAFAFA"        # Warna Tulisan (Putih Terang)
+font = "sans serif"          # Jenis Huruf
