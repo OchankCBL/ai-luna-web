@@ -6,3 +6,5 @@ Pillow
 streamlit-mic-recorder
 SpeechRecognition
 PyPDF2
+st-gsheets-connection
+pandas
