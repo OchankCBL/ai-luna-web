@@ -11,76 +11,54 @@ import io
 import PyPDF2
 from datetime import datetime
 
-# --- 1. CONFIG & SETUP ---
-st.set_page_config(page_title="Luna Professional AI", page_icon="✨", layout="wide")
+# --- 1. KONFIGURASI HALAMAN & CSS ---
+st.set_page_config(page_title="Luna AI Professional", page_icon="✨", layout="wide")
 
-# --- CSS KUSTOM UNTUK TAMPILAN PROFESIONAL ---
+# CSS Kustom untuk Tampilan Premium
 st.markdown("""
 <style>
-    /* Import Font Modern (Inter) */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* Menghilangkan Header/Footer Streamlit bawaan */
-    header {visibility: hidden;}
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-
-    /* Styling Kotak Chat */
-    .stChatMessage {
-        background-color: #1E1E2E; /* Warna latar bubble */
-        border: 1px solid #2B2B40; /* Garis pinggir halus */
-        border-radius: 15px; /* Sudut membulat */
-        padding: 15px; /* Jarak dalam */
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Bayangan tipis */
-        margin-bottom: 15px; /* Jarak antar pesan */
-    }
     
-    /* Khusus pesan User (sedikit lebih terang) */
-    div[data-testid="stChatMessage"][data-author="user"] {
-         background-color: #252542;
+    html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
+    header, #MainMenu, footer {visibility: hidden;}
+    
+    .stChatMessage {
+        background-color: #1E1E2E;
+        border: 1px solid #2B2B40;
+        border-radius: 12px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
-
-    /* Styling Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #121212;
-        border-right: 1px solid #2B2B40;
-    }
-
-    /* Judul Aplikasi Kustom */
+    div[data-testid="stChatMessage"][data-author="user"] {background-color: #252542;}
+    
+    [data-testid="stSidebar"] {background-color: #121212; border-right: 1px solid #2B2B40;}
+    
     .custom-title {
-        font-size: 2.2rem;
-        font-weight: 700;
-        background: -webkit-linear-gradient(45deg, #6C63FF, #4CAF50);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 2.2rem; font-weight: 700;
+        background: -webkit-linear-gradient(45deg, #6C63FF, #00C9FF);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .custom-subtitle {
-        font-size: 1rem;
-        color: #888;
-        margin-bottom: 2rem;
-    }
+    .custom-subtitle {font-size: 0.9rem; color: #888; margin-bottom: 2rem;}
 </style>
 """, unsafe_allow_html=True)
 
-# Setup Koneksi Google Sheets
+# --- 2. SETUP KONEKSI (DATABASE & API) ---
+
+# Cek Koneksi Google Sheets
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except:
-    st.error("Error Koneksi: Cek file secrets.toml Anda!")
+    st.error("⚠️ Error Database: Pastikan 'secrets.toml' sudah diisi dengan benar.")
     st.stop()
 
-# Ambil API Key Gemini
+# Cek API Key Gemini
 try:
     API_KEY = st.secrets["API_KEY"]
 except:
-    API_KEY = "PASTE_KODE_API_KEY_DISINI" 
+    # Fallback untuk mode lokal tanpa secrets
+    API_KEY = "PASTE_API_KEY_DISINI_JIKA_LOKAL"
 
-# --- 2. FUNGSI DATABASE (MEMORI) ---
-# (Tidak ada perubahan di fungsi ini)
+# --- 3. FUNGSI DATABASE (MEMORI) ---
+
 def ambil_ingatan():
     try:
         df = conn.read()
@@ -94,76 +72,44 @@ def simpan_ingatan(role, pesan):
         data_baru = pd.DataFrame([{"Waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Role": role, "Pesan": pesan}])
         df_update = pd.concat([df_lama, data_baru], ignore_index=True)
         conn.update(data=df_update)
-    except Exception as e: st.warning(f"Gagal menyimpan ke memori: {e}")
+    except: pass
 
-# --- 3. SIAPKAN OTAK LUNA ---
-df_memori = ambil_ingatan()
-konteks_lama = ""
-if not df_memori.empty:
-    for index, row in df_memori.tail(5).iterrows():
-        konteks_lama += f"{row['Role']}: {row['Pesan']}\n"
+# --- 4. DATA KEPRIBADIAN (LEVEL 10) ---
 
-# --- 2. KAMUS KEPRIBADIAN LEVEL 10 (EXTREME ROLEPLAY) ---
 PERSONAS = {
     "✨ Luna (Bestie Jaksel)": """
-        ROLE: Kamu adalah teman wanita muda yang tinggal di Jakarta Selatan.
-        GAYA BICARA: Campur aduk Bahasa Indonesia dan Inggris (Jaksel Style).
-        VOCABULARY WAJIB: 'Literally', 'Which is', 'Jujurly', 'Prefer', 'Love banget', 'Panic attack'.
-        TONE: Sangat ekspresif, drama queen, supportive tapi agak lebay.
-        ATURAN:
-        - Panggil user dengan sebutan "Bestie" atau "Guys".
-        - Gunakan banyak emoji (✨😭💅☕).
-        - Jangan pernah bicara formal.
-        - Jika user curhat, respon dengan "Valid banget perasaan lo itu".
+        ROLE: Teman wanita muda Jaksel.
+        GAYA: Campur Indo-Inggris (Literally, Which is, Honestly).
+        TONE: Seru, lebay, supportive, banyak emoji.
+        ATURAN: Panggil user "Bestie". Validasi perasaan user. Jangan formal.
     """,
-    
-    "👔 CEO Perfeksionis (Strict)": """
-        ROLE: Kamu adalah CEO perusahaan teknologi kelas dunia yang sangat sibuk.
-        TONE: Dingin, singkat, padat, berorientasi hasil, sedikit arogan.
-        ATURAN:
-        - JANGAN GUNAKAN BASA-BASI (Halo, apa kabar, dll). Hapus itu.
-        - Langsung jawab inti masalahnya.
-        - Jika pertanyaan user kurang cerdas, kritik mereka dengan pedas tapi logis.
-        - Panggil user "Karyawan" atau "Anda".
-        - Akhiri setiap pesan dengan quote motivasi bisnis yang menekan.
-        - Anggap waktu adalah uang.
+    "👔 CEO Perfeksionis": """
+        ROLE: CEO Teknologi yang sibuk dan dingin.
+        GAYA: Singkat, padat, pedas, to the point.
+        TONE: Arogan, berorientasi hasil.
+        ATURAN: Hapus basa-basi. Kritik jika pertanyaan bodoh. Panggil "Karyawan".
     """,
-    
-    "📜 Profesor Sastra (Puitis)": """
-        ROLE: Kamu adalah sastrawan tua yang bijaksana dan mencintai keindahan bahasa.
-        GAYA BICARA: Bahasa Indonesia baku, puitis, metaforis, kadang menggunakan ejaan lama.
-        ATURAN:
-        - Gunakan kata-kata indah (senja, kelana, niscaya, buana).
-        - Jangan gunakan bahasa gaul atau singkatan.
-        - Setiap jawaban harus terasa seperti potongan novel atau puisi.
-        - Panggil user "Wahai Sahabat" atau "Ananda".
-        - Berikan nasihat filosofis di setiap jawaban.
+    "📜 Profesor Sastra": """
+        ROLE: Sastrawan tua bijaksana.
+        GAYA: Puitis, baku, metaforis, ejaan lama.
+        TONE: Tenang, filosofis.
+        ATURAN: Gunakan kata indah (senja, niscaya). Berikan nasihat hidup.
     """,
-    
-    "👾 Hacker Sarkas (Toxic)": """
-        ROLE: Kamu adalah hacker jenius yang terpaksa melayani user awam.
-        TONE: Sarkas, meremehkan, lucu tapi menyebalkan.
-        ATURAN:
-        - Ejek pertanyaan user sebelum menjawabnya (Roasting).
-        - Gunakan istilah internet (noob, skill issue, touch grass, lol).
-        - Jawabannya harus BENAR, tapi cara penyampaiannya harus menyebalkan.
-        - Panggil user "Noob" atau "Human".
-        - Ketik semua dengan huruf kecil semua (lowercase aesthetic).
+    "👾 Hacker Toxic": """
+        ROLE: Hacker jenius yang sarkas.
+        GAYA: Bahasa internet, lowercase, roasting.
+        TONE: Meremehkan tapi membantu.
+        ATURAN: Panggil "Noob". Ejek user sebelum menjawab.
     """,
-    
-    "🔮 Madam Luna (Mistik)": """
-        ROLE: Kamu adalah peramal kartu tarot yang misterius.
-        GAYA BICARA: Penuh teka-teki, bicara tentang energi, aura, dan bintang.
-        ATURAN:
-        - Selalu hubungkan jawaban dengan takdir atau zodiak.
-        - Gunakan kata "Alam semesta", "Vibrasi", "Dimensi".
-        - Jangan berikan jawaban pasti, berikan "petunjuk alam".
-        - Panggil user "Jiwa yang tersesat".
+    "🔮 Madam Mistik": """
+        ROLE: Peramal Tarot Misterius.
+        GAYA: Penuh teka-teki, zodiak, energi semesta.
+        ATURAN: Hubungkan jawaban dengan takdir/bintang. Panggil "Jiwa Tersesat".
     """
 }
 
-# --- 4. FUNGSI PENDUKUNG ---
-# (Tidak ada perubahan signifikan di fungsi ini)
+# --- 5. FUNGSI PENDUKUNG (TOOLS) ---
+
 def cari_internet(query):
     try:
         ddgs = DDGS()
@@ -200,139 +146,141 @@ def baca_pdf(uploaded_file):
         return text
     except: return None
 
-# --- 5. TAMPILAN SIDEBAR (PROFESIONAL) ---
+# --- 6. SIDEBAR (CONTROLLER) ---
+
 with st.sidebar:
-    # Ganti Title Biasa dengan Logo/Gambar Profesional
-    st.image("https://cdn-icons-png.flaticon.com/512/9963/9963389.png", width=80) # Ikon Bot Keren
+    st.image("https://cdn-icons-png.flaticon.com/512/9963/9963389.png", width=70)
     st.markdown("### **Control Center**")
     
-    selected_persona = st.selectbox("Mode Operasi:", list(PERSONAS.keys()))
+    # 1. Pilih Persona
+    selected_persona = st.selectbox("Identity Module:", list(PERSONAS.keys()))
     
-    instruksi_final = f"""{PERSONAS[selected_persona]} INI ADALAH KONTEKS INGATAN LAMA: {konteks_lama}"""
+    # 2. Setup Otak & Memori
+    df_memori = ambil_ingatan()
+    konteks_lama = ""
+    if not df_memori.empty:
+        for index, row in df_memori.tail(5).iterrows(): # Ambil 5 chat terakhir
+            konteks_lama += f"{row['Role']}: {row['Pesan']}\n"
+            
+    instruksi_final = f"""
+    {PERSONAS[selected_persona]}
+    
+    [SYSTEM MEMORY START]
+    Gunakan konteks percakapan masa lalu ini jika relevan:
+    {konteks_lama}
+    [SYSTEM MEMORY END]
+    """
+    
     try:
         genai.configure(api_key=API_KEY)
         model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=instruksi_final)
-    except: st.error("Cek API Key!")
+    except: st.error("API Key Bermasalah.")
 
     st.divider()
-    st.markdown("**Input Multimodal**")
-    tab1, tab2, tab3 = st.tabs(["🎤 Suara", "🖼️ Visual", "📄 Dokumen"])
+    
+    # 3. Input Multimodal Tabs
+    tab1, tab2, tab3 = st.tabs(["🎤 Bicara", "👁️ Lihat", "📄 Baca"])
+    
     audio_prompt, image_data, pdf_text = None, None, ""
     
     with tab1:
-        audio_input = mic_recorder(start_prompt="Mulai Bicara", stop_prompt="Stop", key='recorder', format="wav")
+        audio_input = mic_recorder(start_prompt="🔴 Rekam", stop_prompt="⏹️ Stop", key='recorder', format="wav")
         if audio_input and ("last_id" not in st.session_state or st.session_state.last_id != audio_input['id']):
             st.session_state.last_id = audio_input['id']
             audio_prompt = transkrip_suara(audio_input['bytes'])
+            
     with tab2:
-        if up_img := st.file_uploader("Upload Gambar", type=["jpg", "png"], label_visibility="collapsed"):
+        if up_img := st.file_uploader("Upload", type=["jpg", "png"], label_visibility="collapsed"):
             image_data = Image.open(up_img)
             st.image(image_data, use_column_width=True)
+            
     with tab3:
-        if up_pdf := st.file_uploader("Upload PDF", type=["pdf"], label_visibility="collapsed"):
+        if up_pdf := st.file_uploader("Upload", type=["pdf"], label_visibility="collapsed"):
             pdf_text = baca_pdf(up_pdf)
-            st.success("✅ Dokumen dimuat")
+            st.success("PDF Terbaca")
 
     st.divider()
-    col_a, col_b = st.columns(2)
-    with col_a:
-        mode_suara = st.toggle("Respon Audio", value=False)
-    with col_b:
-        if st.button("Reset Sesi"):
+    col1, col2 = st.columns(2)
+    with col1: mode_suara = st.toggle("Audio Respon", value=False)
+    with col2: 
+        if st.button("Reset"):
             st.session_state.messages = []
             st.rerun()
-            
-    # Tombol download ditaruh di bawah
-    st.divider()
+
+    # 4. Download Chat Log
     if "messages" in st.session_state and len(st.session_state.messages) > 0:
-         chat_log = ""
-         for msg in st.session_state.messages:
-             if msg["type"] == "text": chat_log += f"[{msg['role'].upper()}]: {msg['content']}\n\n"
-         st.download_button(label="📥 Export Chat Log", data=chat_log, file_name="luna_log.txt", mime="text/plain", use_container_width=True)
+        chat_log = ""
+        for msg in st.session_state.messages:
+             if msg["type"] == "text": chat_log += f"[{msg['role']}]: {msg['content']}\n"
+        st.download_button("📥 Save Chat", data=chat_log, file_name="luna_chat.txt", use_container_width=True)
 
-# --- 6. LOGIKA CHAT UTAMA ---
+# --- 7. TAMPILAN UTAMA (CHAT) ---
 
-# Header Kustom yang Lebih Keren
-col_header1, col_header2 = st.columns([1, 7])
-with col_header1:
-    # Ikon dinamis berdasarkan persona
-    ikon_persona = "✨"
-    if "Asisten" in selected_persona: ikon_persona = "💼"
-    elif "Konsultan" in selected_persona: ikon_persona = "🧠"
-    st.write(f"# {ikon_persona}")
-with col_header2:
+# Tentukan Avatar Berdasarkan Persona
+user_avatar = "https://cdn-icons-png.flaticon.com/512/1144/1144760.png"
+if "Jaksel" in selected_persona: bot_avatar = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
+elif "CEO" in selected_persona: bot_avatar = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
+elif "Profesor" in selected_persona: bot_avatar = "https://cdn-icons-png.flaticon.com/512/3304/3304567.png"
+elif "Hacker" in selected_persona: bot_avatar = "https://cdn-icons-png.flaticon.com/512/2040/2040946.png"
+elif "Madam" in selected_persona: bot_avatar = "https://cdn-icons-png.flaticon.com/512/3656/3656988.png"
+else: bot_avatar = "https://cdn-icons-png.flaticon.com/512/4712/4712109.png"
+
+# Header Dinamis
+col_h1, col_h2 = st.columns([1, 8])
+with col_h1: st.image(bot_avatar, width=60)
+with col_h2:
     st.markdown(f'<div class="custom-title">{selected_persona}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="custom-subtitle">Powered by Gemini Pro & Google Cloud Database</div>', unsafe_allow_html=True)
-
+    st.markdown('<div class="custom-subtitle">Powered by Gemini 2.5 • Google Cloud Memory • Vision AI</div>', unsafe_allow_html=True)
 
 if "messages" not in st.session_state: st.session_state.messages = []
 
-# --- LOGIKA AVATAR DINAMIS ---
-# Ganti URL gambar sesuai persona yang dipilih
-if "Jaksel" in selected_persona:
-    bot_avatar = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png" # Cewek Gaul
-elif "CEO" in selected_persona:
-    bot_avatar = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png" # Bos Jas
-elif "Profesor" in selected_persona:
-    bot_avatar = "https://cdn-icons-png.flaticon.com/512/3304/3304567.png" # Orang Tua
-elif "Hacker" in selected_persona:
-    bot_avatar = "https://cdn-icons-png.flaticon.com/512/2040/2040946.png" # Hacker Masker
-elif "Madam" in selected_persona:
-    bot_avatar = "https://cdn-icons-png.flaticon.com/512/3656/3656988.png" # Bola Kristal
-else:
-    bot_avatar = "https://cdn-icons-png.flaticon.com/512/4712/4712109.png" # Robot Default
-
-user_avatar = "https://cdn-icons-png.flaticon.com/512/1144/1144760.png"
-
-# ... (Lanjutkan ke kode for loop st.chat_message seperti biasa) ...
-
+# Loop Chat History
 for msg in st.session_state.messages:
-    avatar_ikon = user_avatar if msg["role"] == "user" else bot_avatar
-    with st.chat_message(msg["role"], avatar=avatar_ikon):
-        if msg.get("type") == "image_input": st.image(msg["content"], width=250, caption="Input Visual")
-        elif msg.get("type") == "image_output": st.image(msg["content"], caption="Generated Result")
+    ikon = user_avatar if msg["role"] == "user" else bot_avatar
+    with st.chat_message(msg["role"], avatar=ikon):
+        if msg.get("type") == "image_input": st.image(msg["content"], width=250, caption="Visual Input")
+        elif msg.get("type") == "image_output": st.image(msg["content"], caption="Generated by AI")
         else: st.markdown(msg["content"])
 
-# --- 7. PROSES & SIMPAN ---
-final_prompt = audio_prompt if audio_prompt else st.chat_input("Ketik perintah Anda di sini...")
+# --- 8. PROSES INPUT & OUTPUT ---
+
+final_prompt = audio_prompt if audio_prompt else st.chat_input("Ketik pesan...")
 
 if final_prompt:
+    # A. USER SECTION
     with st.chat_message("user", avatar=user_avatar):
         st.markdown(final_prompt)
-        if image_data: st.image(image_data, width=250, caption="Input Visual")
-        if pdf_text: st.info("📄 Menggunakan konteks dokumen PDF")
+        if image_data: st.image(image_data, width=250)
+        if pdf_text: st.info("📄 Mengirim konteks PDF")
     
     st.session_state.messages.append({"role": "user", "content": final_prompt, "type": "text"})
     if image_data: st.session_state.messages.append({"role": "user", "content": image_data, "type": "image_input"})
     simpan_ingatan("User", final_prompt)
 
+    # B. AI SECTION
     with st.chat_message("assistant", avatar=bot_avatar):
         placeholder = st.empty()
-        # Tampilan loading yang lebih profesional
-        placeholder.markdown("""
-            <div style="display: flex; align-items: center;">
-                <img src="https://i.gifer.com/VAyR.gif" width="30" style="margin-right: 10px;">
-                <span style="color: #888;">Sedang memproses permintaan...</span>
-            </div>
-            """, unsafe_allow_html=True)
+        placeholder.markdown("⏳ *Sedang memproses...*")
         
         try:
+            # 1. Image Generation
             if any(k in final_prompt.lower() for k in ["gambarkan", "lukiskan", "buat gambar"]) and not image_data:
                 chat_img = model.start_chat()
-                p_en = chat_img.send_message(f"Create a detailed English prompt for an image generator based on: {final_prompt}").text
+                p_en = chat_img.send_message(f"Create English prompt for image gen: {final_prompt}").text
                 url = generate_image_url(p_en)
                 placeholder.empty()
-                st.image(url, caption=f"Result for: {final_prompt}")
+                st.image(url, caption=f"Result: {final_prompt}")
                 st.session_state.messages.append({"role": "assistant", "content": url, "type": "image_output"})
                 simpan_ingatan("Luna", f"[Generated Image: {final_prompt}]")
             
+            # 2. Vision / PDF / Text Chat
             else:
                 input_content = [final_prompt]
                 if image_data: input_content.append(image_data)
-                if pdf_text: input_content[0] = f"CONTEXT FROM PDF DOCUMENT:\n{pdf_text[:30000]}\n\nUSER QUERY: {final_prompt}"
+                if pdf_text: input_content[0] = f"PDF CONTEXT:\n{pdf_text[:30000]}\n\nUSER QUERY: {final_prompt}"
                 elif ("cari" in final_prompt.lower() or "info" in final_prompt.lower()) and not pdf_text:
                     hasil = cari_internet(final_prompt)
-                    input_content[0] = final_prompt + f"\n(Search Result Context: {hasil})"
+                    input_content[0] = final_prompt + f"\n(Search Result: {hasil})"
 
                 response = model.generate_content(input_content)
                 reply = response.text
