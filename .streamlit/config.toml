@@ -1,6 +1,7 @@
 [theme]
-primaryColor = "#A020F0"     # Warna Tombol/Aksen (Ungu Neon)
-backgroundColor = "#0E1117"  # Warna Latar Belakang (Hitam Pekat)
-secondaryBackgroundColor = "#262730" # Warna Sidebar (Abu Gelap)
-textColor = "#FAFAFA"        # Warna Tulisan (Putih Terang)
-font = "sans serif"          # Jenis Huruf
+primaryColor = "#6C63FF"      # Ungu kebiruan yang lebih modern untuk tombol/aksen
+backgroundColor = "#121212"   # Hitam hampir pekat untuk latar belakang utama
+secondaryBackgroundColor = "#1E1E2E" # Biru gelap keabuan untuk sidebar/input
+textColor = "#E0E0E0"         # Putih gading agar tidak terlalu menusuk mata
+font = "sans serif"           # Kita akan timpa ini nanti dengan CSS
+base = "dark"                 # Memastikan base mode adalah gelap
